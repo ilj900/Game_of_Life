@@ -1,0 +1,10 @@
+/*
+!.gitignore
+!CMakeLists.txt
+!/src/
+!/res/
+!/include/
+!/libs/
+!/fonts/
+!/screenshots/
+
