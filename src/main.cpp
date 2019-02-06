@@ -16,11 +16,16 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severi
 void querryGlParams();
 GLFWmonitor* getMonitor();
 
-static unsigned int SCREEN_WIDTH = 800;
-static unsigned int SCREEN_HEIGHT = 600;
+static int SCREEN_WIDTH = 800;
+static int SCREEN_HEIGHT = 600;
+static int WORLD_WIDTH = 80;
+static int WORLD_HEIGHT = 60;
+static int CELL_WIDTH = SCREEN_WIDTH / WORLD_WIDTH;
+static int CELL_HEIGHT = SCREEN_HEIGHT / WORLD_HEIGHT;
 static int monitor = 1;
 static bool vSync = true;
 static float desiredFrameLength = 1000.0f/60.0f;
+static bool processComputeShader = false;
 
 float screenQuad[] = {
     -1.0f, -1.0f,
@@ -36,21 +41,29 @@ float screenQuad[] = {
 /// -w world size. "-w 192 108" will create world with width 192 cells and height 108. With resoluton 1920x1080 that means every cell takes 10 pixels
 /// -s allows you to choose the screen. 0 stands for main monitor, 1, 2, 3, etc for all other. "-s 1" means you will use your second monitor, if you have one
 /// -f set's fps, like "-f 60". If not set fps will be unlocked.
-/// No more than 10 args in total for now
 int main(int arg, char** args)
 {
-    bool parametersParsed = parseParameters(arg, args);
-
     glfwInit();
 
     GLFWmonitor *bestMonitor = getMonitor();
+
+    bool parametersParsed = parseParameters(arg, args);
+    /// For now I don't have any parse function, so I'll set everything here
+    {
+        SCREEN_WIDTH = 800;
+        SCREEN_HEIGHT = 600;
+        WORLD_WIDTH = 16;
+        WORLD_HEIGHT = 12;
+        CELL_WIDTH = SCREEN_WIDTH / WORLD_WIDTH;
+        CELL_HEIGHT = SCREEN_HEIGHT / WORLD_HEIGHT;
+    }
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow *window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "LearnOpwnGL", bestMonitor, NULL);
+    GLFWwindow *window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "LearnOpwnGL", NULL, NULL);
     if (window == NULL)
     {
         const char *description;
@@ -83,7 +96,6 @@ int main(int arg, char** args)
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetKeyCallback(window, key_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     if (!shaderManager::addShadervf("./res/shaders/simple.vertex.shader", "./res/shaders/simple.fragment.shader", "Draw Shader"))
         return -1;
@@ -91,7 +103,8 @@ int main(int arg, char** args)
         return -1;
 
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-    glClearColor(0.2f, 0.3f, 0.4f, 1.0f);
+    glClearColor(0.1f, 0.15f, 0.2f, 1.0f);
+    /// Though I have alpha channel I'm not going to enable blending... for now.
 
     unsigned int squareVBO, squareVAO;
     glGenVertexArrays(1, &squareVAO);
@@ -103,48 +116,52 @@ int main(int arg, char** args)
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glBindVertexArray(0);
 
-    float rateOfInitialPopulation = 10;
-    unsigned int fieldWidth = 384;
-    unsigned int fieldHeight = 216;
-    unsigned int bufferSize = fieldWidth * fieldHeight * 4; /// I have to use 4 components because there are no such thing as GL_RGB8UI for GL_TEXTURE_BUFFER
-    unsigned char* initialFrame = new unsigned char[bufferSize]();
+    float rateOfInitialPopulation = 1;
+    unsigned int bufferSize = WORLD_WIDTH * WORLD_HEIGHT * 4;
+    unsigned int* initialFrame = new unsigned int[bufferSize]();
     std::mt19937 rng;
     rng.seed(std::random_device()());
     std::uniform_int_distribution<std::mt19937::result_type> dist2(0, rateOfInitialPopulation);
     for(unsigned int i = 0; i < bufferSize; i+=4)
         if (dist2(rng) == rateOfInitialPopulation)
+        {
             initialFrame[i] = 255;
-        else
-            initialFrame[i] = 0;
+            initialFrame[i+1] = 0;
+            initialFrame[i+2] = 0;
+            initialFrame[i+3] = 255;
+        }
 
-    unsigned int nrOfFrames = 2;
+    ///Print out buffer of initial frame
+//    for(unsigned int i = 0; i < bufferSize; i+=4)
+//    {
+//        if (i%(WORLD_WIDTH * 4) == 0)
+//            std::cout<<std::endl;
+//        std::cout<<"|"<<initialFrame[i]<<":"<<initialFrame[i+1]<<":"<<initialFrame[i+2]<<":"<<initialFrame[i+3]<<"|";
+//    }
+//    std::cout<<std::endl;
+
+    unsigned int nrOfFrames = 3;
     unsigned int* buffers = new unsigned int[nrOfFrames];
     glGenBuffers(nrOfFrames, buffers);
     for(unsigned int i = 0; i < nrOfFrames; i++)
     {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, buffers[i]);
         if (i==0)
-            glBufferData(GL_SHADER_STORAGE_BUFFER, bufferSize, initialFrame, GL_DYNAMIC_DRAW);
+            glBufferData(GL_SHADER_STORAGE_BUFFER, bufferSize*4, initialFrame, GL_DYNAMIC_DRAW);
         else
-            glBufferData(GL_SHADER_STORAGE_BUFFER, bufferSize, NULL, GL_DYNAMIC_DRAW);
-    }
-    unsigned int *textures = new unsigned int[nrOfFrames];
-    glGenTextures(nrOfFrames, textures);
-    for (unsigned int i = 0; i < nrOfFrames; i++)
-    {
-        glBindTexture(GL_TEXTURE_BUFFER, textures[i]);
-        glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA8UI, buffers[i]);
+            glBufferData(GL_SHADER_STORAGE_BUFFER, bufferSize*4, NULL, GL_DYNAMIC_DRAW);
     }
 
+    /// I need only one texture, and I'll switch it's sourse with glTexBuffer();
+    unsigned int mainTexture;
+    glGenTextures(1, &mainTexture);
+    glBindTexture(GL_TEXTURE_BUFFER, mainTexture);
 
     static float deltaT = 0.0f;
     static float currentFrame = 0.0f;
     static float previousFrame = 0.0f;
 
-    shaderManager::setAndUse("Draw Shader");
-    shaderManager::setInt("sceneTexture", 0);
-
-    unsigned int textureToDisplay = 0;
+    unsigned int currentWorld = 0;
     while (!glfwWindowShouldClose(window))
     {
         currentFrame = glfwGetTime();
@@ -156,21 +173,34 @@ int main(int arg, char** args)
         glClear(GL_COLOR_BUFFER_BIT);
 
         shaderManager::setAndUse("Draw Shader");
-        shaderManager::setInt("fieldWidth", fieldWidth);
-        shaderManager::setInt("fieldHeight", fieldHeight);
-        shaderManager::setInt("cellWidth", 10);
-        shaderManager::setInt("cellHeight", 10);
+        shaderManager::setInt("WORLD_WIDTH", WORLD_WIDTH);
+        shaderManager::setInt("WORLD_HEIGHT", WORLD_HEIGHT);
+        shaderManager::setInt("CELL_WIDTH", CELL_WIDTH);
+        shaderManager::setInt("CELL_HEIGHT", CELL_HEIGHT);
         glBindVertexArray(squareVAO);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_BUFFER, textures[0]);
+        glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32I, buffers[currentWorld]);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
 
+        if (processComputeShader)
+        {
+            shaderManager::setAndUse("Compute Shader");
+            shaderManager::setInt("WORLD_WIDTH", WORLD_WIDTH);
+            shaderManager::setInt("WORLD_HEIGHT", WORLD_HEIGHT);
+            for(unsigned int i = 0; i < nrOfFrames; i++)
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, buffers[(i+currentWorld)%nrOfFrames]);
+            glDispatchCompute(WORLD_WIDTH * WORLD_HEIGHT, 1, 1);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+            currentWorld++;
+            if (currentWorld == nrOfFrames)
+                currentWorld = 0;
+            processComputeShader = false;
+        }
+
+        Sleep(16);
+
         glfwSwapBuffers(window);
         glfwPollEvents();
-        textureToDisplay++;
-        if (textureToDisplay == nrOfFrames)
-            textureToDisplay = 0;
     }
 
     glfwTerminate();
@@ -198,6 +228,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 {
     if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+    if(key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+        processComputeShader = true;
 }
 
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)

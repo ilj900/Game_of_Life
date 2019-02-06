@@ -3,16 +3,66 @@
 layout (local_size_x = 1) in;
 
 layout (std430, binding = 0) buffer storage1 {
-    lowp uvec3 currentWorld[];
+    ivec4 todayWorld[];
 };
 
 layout (std430, binding = 1) buffer storage2 {
-    lowp uvec3 tomorrowWorld[];
+    ivec4 tomorrowWorld[];
 };
 
-
+uniform int WORLD_WIDTH;
+uniform int WORLD_HEIGHT;
 
 void main()
 {
-    uvec2 idx = gl_GlobalInvocationID.xy;
+    uint idx = gl_GlobalInvocationID.x;
+    ivec4 color = todayWorld[idx];
+    if (idx + 1 == WORLD_WIDTH * WORLD_HEIGHT)
+        tomorrowWorld[0] = todayWorld[idx].rgba;
+    else
+        tomorrowWorld[idx+1] = todayWorld[idx].rgba;
+
+//    int topIdx = idx + WORLD_WIDTH;
+//    int botIdx = idx - WORLD_WIDTH;
+//    int rightIdx = idx + 1;
+//    int leftIdx = idx - 1;
+//    int topLeftIdx = topIdx - 1;
+//    int topRightIdx = topIdx + 1;
+//    int botLeftIdx = botIdx - 1;
+//    int botRightIdx = botIdx + 1;
+//    ///This ifs transform the world into eclosed one
+//    if (gl_GlobalInvocationID.y == 0)
+//    {
+//        botIdx += WORLD_WIDTH * WORLD_HEIGHT;
+//        botLeftIdx = botIdx - 1;
+//        botRightIdx = botIdx + 1;
+//    }
+//    if (gl_GlobalInvocationID.y == WORLD_HEIGHT -1)
+//    {
+//        topIdx -= WORLD_WIDTH * WORLD_HEIGHT;
+//        topLeftIdx = topIdx - 1;
+//        topRightIdx = topIdx + 1;
+//    }
+//    if (gl_GlobalInvocationID.x  == 0)
+//    {
+//        leftIdx += WORLD_WIDTH;
+//        topLeftIdx += WORLD_WIDTH;
+//        botLeftIdx += WORLD_WIDTH;
+//    }
+//    if (gl_GlobalInvocationID.x == WORLD_WIDTH - 1)
+//    {
+//        rightIdx -= WORLD_WIDTH;
+//        topRightIdx -= WORLD_WIDTH;
+//        botRightIdx -= WORLD_WIDTH;
+//    }
+
+//    uint aliveNeighbors = todayWorld[topIdx].r + todayWorld[botIdx].r + todayWorld[rightIdx].r + todayWorld[leftIdx].r + todayWorld[topLeftIdx].r + todayWorld[topRightIdx].r + todayWorld[botLeftIdx].r + todayWorld[botRightIdx].r;
+//    aliveNeighbors /= 255;
+//    if (aliveNeighbors >= 3)
+//        tomorrowWorld[idx].r = 255;
+//    if (aliveNeighbors == 2)
+//        tomorrowWorld[idx].r = todayWorld[idx].r;
+//    if (aliveNeighbors < 2)
+//        tomorrowWorld[idx].r = 0;
+
 }
