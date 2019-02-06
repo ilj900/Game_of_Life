@@ -22,7 +22,7 @@ static int WORLD_WIDTH = 80;
 static int WORLD_HEIGHT = 60;
 static int CELL_WIDTH = SCREEN_WIDTH / WORLD_WIDTH;
 static int CELL_HEIGHT = SCREEN_HEIGHT / WORLD_HEIGHT;
-static int monitor = 1;
+static int monitor = 0;
 static bool vSync = true;
 static float desiredFrameLength = 1000.0f/60.0f;
 static bool processComputeShader = false;
@@ -50,10 +50,10 @@ int main(int arg, char** args)
     bool parametersParsed = parseParameters(arg, args);
     /// For now I don't have any parse function, so I'll set everything here
     {
-        SCREEN_WIDTH = 800;
-        SCREEN_HEIGHT = 600;
-        WORLD_WIDTH = 16;
-        WORLD_HEIGHT = 12;
+        SCREEN_WIDTH = 1200;
+        SCREEN_HEIGHT = 900;
+        WORLD_WIDTH = 120;
+        WORLD_HEIGHT = 90;
         CELL_WIDTH = SCREEN_WIDTH / WORLD_WIDTH;
         CELL_HEIGHT = SCREEN_HEIGHT / WORLD_HEIGHT;
     }
@@ -73,6 +73,8 @@ int main(int arg, char** args)
         glfwTerminate();
         return -1;
     }
+
+    glfwSetWindowPos(window, (1920-SCREEN_WIDTH)/2, (1080-SCREEN_HEIGHT)/2);
 
     glfwMakeContextCurrent(window);
 
@@ -104,7 +106,6 @@ int main(int arg, char** args)
 
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     glClearColor(0.1f, 0.15f, 0.2f, 1.0f);
-    /// Though I have alpha channel I'm not going to enable blending... for now.
 
     unsigned int squareVBO, squareVAO;
     glGenVertexArrays(1, &squareVAO);
@@ -116,7 +117,7 @@ int main(int arg, char** args)
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glBindVertexArray(0);
 
-    float rateOfInitialPopulation = 1;
+    float rateOfInitialPopulation = 3;
     unsigned int bufferSize = WORLD_WIDTH * WORLD_HEIGHT * 4;
     unsigned int* initialFrame = new unsigned int[bufferSize]();
     std::mt19937 rng;
@@ -125,10 +126,10 @@ int main(int arg, char** args)
     for(unsigned int i = 0; i < bufferSize; i+=4)
         if (dist2(rng) == rateOfInitialPopulation)
         {
-            initialFrame[i] = 255;
-            initialFrame[i+1] = 0;
-            initialFrame[i+2] = 0;
-            initialFrame[i+3] = 255;
+            initialFrame[i] = 1;
+//            initialFrame[i+1] = 0;
+//            initialFrame[i+2] = 0;
+//            initialFrame[i+3] = 0;
         }
 
     ///Print out buffer of initial frame
@@ -189,7 +190,7 @@ int main(int arg, char** args)
             shaderManager::setInt("WORLD_HEIGHT", WORLD_HEIGHT);
             for(unsigned int i = 0; i < nrOfFrames; i++)
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, buffers[(i+currentWorld)%nrOfFrames]);
-            glDispatchCompute(WORLD_WIDTH * WORLD_HEIGHT, 1, 1);
+            glDispatchCompute(WORLD_WIDTH, WORLD_HEIGHT, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
             currentWorld++;
             if (currentWorld == nrOfFrames)
@@ -197,7 +198,7 @@ int main(int arg, char** args)
             processComputeShader = false;
         }
 
-        Sleep(16);
+        Sleep(40);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -229,7 +230,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
     if(key == GLFW_KEY_SPACE && action == GLFW_PRESS)
-        processComputeShader = true;
+        processComputeShader = !processComputeShader;
 }
 
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)

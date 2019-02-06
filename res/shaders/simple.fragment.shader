@@ -15,8 +15,8 @@ void main()
     int fragIndex = WORLD_WIDTH * y + x;
     ivec4 color = texelFetch(sceneTexture, fragIndex);
 
-    if (color.a == 0)
+    //Just ignore alpha... for now
+    if (color.r + color.g + color.b + color.a == 0)
         discard;
-
-    FragColor = vec4(color.r/255.0, color.g/255.0, color.b/255.0, 1.0);
+    FragColor = vec4(color.r, color.g, color.b, 1.0);
 }
