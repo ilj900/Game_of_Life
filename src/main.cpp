@@ -26,6 +26,8 @@ static int monitor = 0;
 static bool vSync = true;
 static float desiredFrameLength = 1000.0f/60.0f;
 static bool processComputeShader = false;
+static bool goBackward = false;
+static bool goForward = false;
 
 float screenQuad[] = {
     -1.0f, -1.0f,
@@ -52,8 +54,8 @@ int main(int arg, char** args)
     {
         SCREEN_WIDTH = 1200;
         SCREEN_HEIGHT = 900;
-        WORLD_WIDTH = 120;
-        WORLD_HEIGHT = 90;
+        WORLD_WIDTH = 12;
+        WORLD_HEIGHT = 9;
         CELL_WIDTH = SCREEN_WIDTH / WORLD_WIDTH;
         CELL_HEIGHT = SCREEN_HEIGHT / WORLD_HEIGHT;
     }
@@ -141,10 +143,10 @@ int main(int arg, char** args)
 //    }
 //    std::cout<<std::endl;
 
-    unsigned int nrOfFrames = 3;
-    unsigned int* buffers = new unsigned int[nrOfFrames];
-    glGenBuffers(nrOfFrames, buffers);
-    for(unsigned int i = 0; i < nrOfFrames; i++)
+    unsigned int historyLength = 4;
+    unsigned int* buffers = new unsigned int[historyLength];
+    glGenBuffers(historyLength, buffers);
+    for(unsigned int i = 0; i < historyLength; i++)
     {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, buffers[i]);
         if (i==0)
@@ -161,8 +163,9 @@ int main(int arg, char** args)
     static float deltaT = 0.0f;
     static float currentFrame = 0.0f;
     static float previousFrame = 0.0f;
+    static int frameOffset = 0;
 
-    unsigned int currentWorld = 0;
+    static int currentWorld = 0;
     while (!glfwWindowShouldClose(window))
     {
         currentFrame = glfwGetTime();
@@ -179,21 +182,35 @@ int main(int arg, char** args)
         shaderManager::setInt("CELL_WIDTH", CELL_WIDTH);
         shaderManager::setInt("CELL_HEIGHT", CELL_HEIGHT);
         glBindVertexArray(squareVAO);
-        glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32I, buffers[currentWorld]);
+        glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32I, buffers[(currentWorld - frameOffset + historyLength)%historyLength]);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
 
+        if (goBackward)
+        {
+            if (frameOffset < (historyLength - 1))
+                frameOffset++;
+            goBackward = false;
+        }
+        if (goForward)
+        {
+            if (frameOffset > 0)
+                frameOffset--;
+            goForward = false;
+        }
+
         if (processComputeShader)
         {
+            frameOffset = 0;
             shaderManager::setAndUse("Compute Shader");
             shaderManager::setInt("WORLD_WIDTH", WORLD_WIDTH);
             shaderManager::setInt("WORLD_HEIGHT", WORLD_HEIGHT);
-            for(unsigned int i = 0; i < nrOfFrames; i++)
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, buffers[(i+currentWorld)%nrOfFrames]);
+            for(unsigned int i = 0; i < historyLength; i++)
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, buffers[(i+currentWorld)%historyLength]);
             glDispatchCompute(WORLD_WIDTH, WORLD_HEIGHT, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
             currentWorld++;
-            if (currentWorld == nrOfFrames)
+            if (currentWorld == historyLength)
                 currentWorld = 0;
             processComputeShader = false;
         }
@@ -231,6 +248,10 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         glfwSetWindowShouldClose(window, true);
     if(key == GLFW_KEY_SPACE && action == GLFW_PRESS)
         processComputeShader = !processComputeShader;
+    if(key == GLFW_KEY_LEFT && action == GLFW_PRESS)
+        goBackward = !goBackward;
+    if(key == GLFW_KEY_RIGHT && action == GLFW_PRESS)
+        goForward = !goForward;
 }
 
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)

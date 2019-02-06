@@ -2,16 +2,20 @@
 
 layout (local_size_x = 1) in;
 
-layout (std430, binding = 0) buffer storage1 {
+layout (std430, binding = 0) buffer storage0 {
     ivec4 todayWorld[];
 };
 
-layout (std430, binding = 1) buffer storage2 {
+layout (std430, binding = 1) buffer storage1 {
     ivec4 tomorrowWorld[];
 };
 
-layout (std430, binding = 2) buffer storage3 {
+layout (std430, binding = 2) buffer storage2 {
     ivec4 yesterdayWorld[];
+};
+
+layout (std430, binding = 3) buffer storage3 {
+    ivec4 theDayBeforeYesterdayWorld[];
 };
 
 uniform int WORLD_WIDTH;
@@ -30,7 +34,7 @@ void main()
     int topRightIdx = topIdx + 1;
     int botLeftIdx = botIdx - 1;
     int botRightIdx = botIdx + 1;
-//    ///This ifs transform the world into eclosed one
+    ///This ifs transform the world into eclosed one
     if (gl_GlobalInvocationID.y == 0)
     {
         botIdx += WORLD_WIDTH * WORLD_HEIGHT;
