@@ -11,10 +11,9 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 void processInput(GLFWwindow *window);
-bool parseParameters(unsigned int nrOfParameters, char** parameters);
+bool setupEnvironment(int screenWidth, int screenHeight, int monitor, bool fullscreen, bool borderless, int worldWidth, int worldHeight, int fps);
 void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
 void querryGlParams();
-GLFWmonitor* getMonitor();
 
 static int SCREEN_WIDTH = 800;
 static int SCREEN_HEIGHT = 600;
@@ -22,9 +21,15 @@ static int WORLD_WIDTH = 80;
 static int WORLD_HEIGHT = 60;
 static int CELL_WIDTH = SCREEN_WIDTH / WORLD_WIDTH;
 static int CELL_HEIGHT = SCREEN_HEIGHT / WORLD_HEIGHT;
-static int monitor = 0;
-static bool vSync = true;
-static float desiredFrameLength = 1000.0f/60.0f;
+static bool FULL_SCREEN = false;
+static bool BORDER = false;
+static float DESIRED_FRAME_LENGTH = 1000.0f/60.0f;
+
+static GLFWmonitor *primeMonitor = NULL;
+static GLFWwindow *window = NULL;
+static int windowPosX = 0;
+static int windowPosY = 0;
+
 static bool processComputeShader = false;
 static bool goBackward = false;
 static bool goForward = false;
@@ -38,34 +43,27 @@ float screenQuad[] = {
     1.0f, -1.0f
 };
 
-/// Available arguments to pass are:
-/// -r resolution in format width height, so if you want to set 1920 x 1080 you have to pass "-r 1920 1080"
-/// -w world size. "-w 192 108" will create world with width 192 cells and height 108. With resoluton 1920x1080 that means every cell takes 10 pixels
-/// -s allows you to choose the screen. 0 stands for main monitor, 1, 2, 3, etc for all other. "-s 1" means you will use your second monitor, if you have one
-/// -f set's fps, like "-f 60". If not set fps will be unlocked.
-int main(int arg, char** args)
+int main()
 {
     glfwInit();
 
-    GLFWmonitor *bestMonitor = getMonitor();
+    bool parametersParsed = setupEnvironment(1200, 800, 0, false, true, 120, 80, 60);
+    if (!parametersParsed)
+        exit (1);
 
-    bool parametersParsed = parseParameters(arg, args);
     /// For now I don't have any parse function, so I'll set everything here
-    {
-        SCREEN_WIDTH = 1200;
-        SCREEN_HEIGHT = 900;
-        WORLD_WIDTH = 12;
-        WORLD_HEIGHT = 9;
-        CELL_WIDTH = SCREEN_WIDTH / WORLD_WIDTH;
-        CELL_HEIGHT = SCREEN_HEIGHT / WORLD_HEIGHT;
-    }
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+    if (BORDER)
+        glfwWindowHint(GLFW_DECORATED, GL_FALSE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow *window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "LearnOpwnGL", NULL, NULL);
+    if (FULL_SCREEN)
+        window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Game of Life", primeMonitor, NULL);
+    else
+        window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Game of Life", NULL, NULL);
     if (window == NULL)
     {
         const char *description;
@@ -76,7 +74,10 @@ int main(int arg, char** args)
         return -1;
     }
 
-    glfwSetWindowPos(window, (1920-SCREEN_WIDTH)/2, (1080-SCREEN_HEIGHT)/2);
+    if (!FULL_SCREEN)
+    {
+        glfwSetWindowPos(window, windowPosX, windowPosY);
+    }
 
     glfwMakeContextCurrent(window);
 
@@ -129,19 +130,19 @@ int main(int arg, char** args)
         if (dist2(rng) == rateOfInitialPopulation)
         {
             initialFrame[i] = 1;
-//            initialFrame[i+1] = 0;
-//            initialFrame[i+2] = 0;
-//            initialFrame[i+3] = 0;
+            //            initialFrame[i+1] = 0;
+            //            initialFrame[i+2] = 0;
+            //            initialFrame[i+3] = 0;
         }
 
     ///Print out buffer of initial frame
-//    for(unsigned int i = 0; i < bufferSize; i+=4)
-//    {
-//        if (i%(WORLD_WIDTH * 4) == 0)
-//            std::cout<<std::endl;
-//        std::cout<<"|"<<initialFrame[i]<<":"<<initialFrame[i+1]<<":"<<initialFrame[i+2]<<":"<<initialFrame[i+3]<<"|";
-//    }
-//    std::cout<<std::endl;
+    //    for(unsigned int i = 0; i < bufferSize; i+=4)
+    //    {
+    //        if (i%(WORLD_WIDTH * 4) == 0)
+    //            std::cout<<std::endl;
+    //        std::cout<<"|"<<initialFrame[i]<<":"<<initialFrame[i+1]<<":"<<initialFrame[i+2]<<":"<<initialFrame[i+3]<<"|";
+    //    }
+    //    std::cout<<std::endl;
 
     unsigned int historyLength = 4;
     unsigned int* buffers = new unsigned int[historyLength];
@@ -179,6 +180,7 @@ int main(int arg, char** args)
         shaderManager::setAndUse("Draw Shader");
         shaderManager::setInt("WORLD_WIDTH", WORLD_WIDTH);
         shaderManager::setInt("WORLD_HEIGHT", WORLD_HEIGHT);
+        shaderManager::setInt("WORLD_SIZE", WORLD_WIDTH * WORLD_HEIGHT);
         shaderManager::setInt("CELL_WIDTH", CELL_WIDTH);
         shaderManager::setInt("CELL_HEIGHT", CELL_HEIGHT);
         glBindVertexArray(squareVAO);
@@ -212,7 +214,7 @@ int main(int arg, char** args)
             currentWorld++;
             if (currentWorld == historyLength)
                 currentWorld = 0;
-            processComputeShader = false;
+            //processComputeShader = false;
         }
 
         Sleep(40);
@@ -252,6 +254,11 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         goBackward = !goBackward;
     if(key == GLFW_KEY_RIGHT && action == GLFW_PRESS)
         goForward = !goForward;
+    if(key == GLFW_KEY_ENTER && action == GLFW_PRESS)
+    {
+        glfwGetWindowPos(window, &windowPosX, &windowPosY);
+        std::cout<<"xPos: "<<windowPosX<<", yPos: "<<windowPosY<<std::endl;
+    }
 }
 
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)
@@ -280,21 +287,73 @@ void querryGlParams()
         shaderManager::querryGlParam(params[i], explanations[i]);
 }
 
-GLFWmonitor* getMonitor()
+bool setupEnvironment(int screenWidth, int screenHeight, int monitor, bool fullscreen, bool borderless, int worldWidth, int worldHeight, int fps)
 {
-    int count;
-    GLFWmonitor** monitors = glfwGetMonitors(&count);
-    GLFWmonitor* chosenMonitor;
-    if (monitor < count)
-        chosenMonitor = monitors[monitor];
-    else
-        chosenMonitor = monitors[count-1];
-    const GLFWvidmode *mode = glfwGetVideoMode(chosenMonitor);
-    SCREEN_WIDTH = mode->width;
-    SCREEN_HEIGHT = mode->height;
-    if (vSync)
-        desiredFrameLength = 1000.0/mode->refreshRate;
-    return chosenMonitor;
+    /// Let's find the monitor
+    int monitorsCount;
+    GLFWmonitor** monitors = glfwGetMonitors(&monitorsCount);
+    if (monitorsCount > 0)
+    {
+        if (monitor < monitorsCount)
+            primeMonitor = monitors[monitor];
+        else
+            primeMonitor = monitors[0];
+    } else {
+        std::cout<<"I couldn't find any monitors, how do you suppose to use me? You can't even read this message!"<<std::endl;
+        return false;
+    }
+
+    /// Here we get monitor position and mode
+    int monitorPosX, monitorPosY;
+    glfwGetMonitorPos(primeMonitor, &monitorPosX, &monitorPosY);
+    const GLFWvidmode *mode = glfwGetVideoMode(primeMonitor);
+
+    FULL_SCREEN = fullscreen;
+    if (FULL_SCREEN)
+    {
+        SCREEN_WIDTH = mode->width;
+        SCREEN_HEIGHT = mode->height;
+    } else
+        if (screenWidth > mode->width || screenHeight > mode->height)
+        {
+            SCREEN_WIDTH = mode->width;
+            SCREEN_HEIGHT = mode->height;
+        } else {
+            SCREEN_WIDTH = screenWidth;
+            SCREEN_HEIGHT = screenHeight;
+        }
+    /// Let's check if screen dimensions fit the world dimensions
+    if (SCREEN_WIDTH % worldWidth != 0 || SCREEN_HEIGHT % worldHeight != 0)
+    {
+        std::cout<<"Desired resolution can not be divided by one of the world dimension without a remainder."<<std::endl;
+        return false;
+    } else {
+        WORLD_WIDTH = worldWidth;
+        WORLD_HEIGHT = worldHeight;
+    }
+
+    CELL_WIDTH = SCREEN_WIDTH / WORLD_WIDTH;
+    CELL_HEIGHT = SCREEN_HEIGHT / WORLD_HEIGHT;
+
+    BORDER = !borderless;
+    DESIRED_FRAME_LENGTH = 1000.0f/float(fps);
+
+    if (!fullscreen)
+    {
+        /// IDK why this formula doesn't work with my setup
+        /// This should position the frame directly into the center of the monitor
+        /// But it doesn't work with my second monitor
+        if (primeMonitor == monitors[0])
+        {
+            windowPosX = monitorPosX + (mode->width - SCREEN_WIDTH)/2;
+            windowPosY = monitorPosY + (mode->height - SCREEN_HEIGHT)/2;
+        } else {
+            windowPosX = monitorPosX;
+            windowPosY = monitorPosY+1; /// To allow users to move the window
+        }
+    }
+
+    return true;
 }
 
 void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam)
@@ -335,9 +394,4 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severi
     case GL_DEBUG_SEVERITY_NOTIFICATION: std::cout << "Severity: notification"; break;
     } std::cout << std::endl;
     std::cout << std::endl;
-}
-
-bool parseParameters(unsigned int nrOfParameters, char** parameters)
-{
-    return true;
 }
