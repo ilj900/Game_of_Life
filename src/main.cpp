@@ -7,8 +7,7 @@
 #include <random>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void mouse_callback(GLFWwindow *window, double xpos, double ypos);
-void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 void processInput(GLFWwindow *window);
 bool setupEnvironment(int screenWidth, int screenHeight, int monitor, bool fullscreen, bool borderless, int worldWidth, int worldHeight, int fps);
@@ -33,6 +32,10 @@ static int windowPosY = 0;
 static bool processComputeShader = false;
 static bool goBackward = false;
 static bool goForward = false;
+static bool bySteps = true;
+
+static int currentWorld = 0;
+unsigned int* buffers;
 
 float screenQuad[] = {
     -1.0f, -1.0f,
@@ -47,11 +50,9 @@ int main()
 {
     glfwInit();
 
-    bool parametersParsed = setupEnvironment(1200, 800, 0, false, true, 120, 80, 60);
+    bool parametersParsed = setupEnvironment(800, 800, 0, false, true, 80, 80, 60);
     if (!parametersParsed)
         exit (1);
-
-    /// For now I don't have any parse function, so I'll set everything here
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
@@ -98,9 +99,8 @@ int main()
     }
 
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
     glfwSetKeyCallback(window, key_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
 
     if (!shaderManager::addShadervf("./res/shaders/simple.vertex.shader", "./res/shaders/simple.fragment.shader", "Draw Shader"))
         return -1;
@@ -129,7 +129,7 @@ int main()
     for(unsigned int i = 0; i < bufferSize; i+=4)
         if (dist2(rng) == rateOfInitialPopulation)
         {
-            initialFrame[i] = 1;
+            initialFrame[i] = 0;
             //            initialFrame[i+1] = 0;
             //            initialFrame[i+2] = 0;
             //            initialFrame[i+3] = 0;
@@ -145,7 +145,7 @@ int main()
     //    std::cout<<std::endl;
 
     unsigned int historyLength = 4;
-    unsigned int* buffers = new unsigned int[historyLength];
+    buffers = new unsigned int[historyLength];
     glGenBuffers(historyLength, buffers);
     for(unsigned int i = 0; i < historyLength; i++)
     {
@@ -166,7 +166,7 @@ int main()
     static float previousFrame = 0.0f;
     static int frameOffset = 0;
 
-    static int currentWorld = 0;
+    currentWorld = 0;
     while (!glfwWindowShouldClose(window))
     {
         currentFrame = glfwGetTime();
@@ -214,10 +214,11 @@ int main()
             currentWorld++;
             if (currentWorld == historyLength)
                 currentWorld = 0;
-            //processComputeShader = false;
+            if (bySteps)
+                processComputeShader = false;
         }
 
-        Sleep(40);
+        Sleep(4);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -225,6 +226,27 @@ int main()
 
     glfwTerminate();
     return 0;
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS)
+    {
+        double x, y;
+        glfwGetCursorPos(window, &x, &y);
+        ///The Y position should be inverted so
+        y = SCREEN_HEIGHT - y;
+        int xPos = int(x)/CELL_WIDTH%WORLD_WIDTH;
+        int yPos = int(y)/CELL_HEIGHT%WORLD_HEIGHT;
+        int arrayPos = yPos * WORLD_WIDTH + xPos;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffers[currentWorld]);
+        unsigned int *buffer = (unsigned int *)glMapBufferRange(GL_SHADER_STORAGE_BUFFER, arrayPos * 4 * sizeof(int), sizeof(int) * 4, GL_MAP_WRITE_BIT | GL_MAP_READ_BIT);
+        if (buffer[0] == 1)
+            buffer[0] = 0;
+        else
+            buffer[0] = 1;
+        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+    }
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
@@ -254,27 +276,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         goBackward = !goBackward;
     if(key == GLFW_KEY_RIGHT && action == GLFW_PRESS)
         goForward = !goForward;
-    if(key == GLFW_KEY_ENTER && action == GLFW_PRESS)
-    {
-        glfwGetWindowPos(window, &windowPosX, &windowPosY);
-        std::cout<<"xPos: "<<windowPosX<<", yPos: "<<windowPosY<<std::endl;
-    }
-}
-
-void mouse_callback(GLFWwindow *window, double xpos, double ypos)
-{
-    static double mouseSensitivity = 0.0005f;
-    static double previosPosX = xpos;
-    static double previosPosY = ypos;
-
-    float deltax = (previosPosX - xpos)*mouseSensitivity;
-    previosPosX = xpos;
-    float deltay = (previosPosY - ypos)*mouseSensitivity;
-    previosPosY = ypos;
-}
-
-void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
-{
+    if(key == GLFW_KEY_B && action == GLFW_PRESS)
+        bySteps = !bySteps;
 }
 
 void querryGlParams()
